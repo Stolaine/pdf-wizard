@@ -46,6 +46,7 @@ async def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
                 id=m.id,
                 role=m.role,
                 content=m.content,
+                thinking=m.thinking,
                 created_at=m.created_at,
             )
             for m in conv.messages

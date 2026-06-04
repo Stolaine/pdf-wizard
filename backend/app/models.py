@@ -43,6 +43,7 @@ class QueryResponse(BaseModel):
     answer: str
     conversation_id: str
     sources: list[SourceChunk] = Field(default_factory=list)
+    thinking: Optional[str] = None
 
 
 # ── Conversation history ────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ class MessageOut(BaseModel):
     role: str  # "user" | "assistant"
     content: str
     created_at: datetime
+    thinking: Optional[str] = None
 
 
 class ConversationSummary(BaseModel):

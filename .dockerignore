@@ -1,0 +1,32 @@
+# ── Python ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ── Node ────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+
+# ── Data / DBs ─────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+chroma_data/
+backend/chroma_data/
+
+# ── Credentials ────────────────────────────────────
+# .env is NOT ignored here — we need it in the build context
+# It gets passed via --env-file at runtime instead
+
+# ── Git / IDE / OS ─────────────────────────────────
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+*.md
+scripts/

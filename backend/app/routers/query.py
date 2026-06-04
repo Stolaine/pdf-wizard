@@ -38,10 +38,11 @@ async def query_pdf(
         raise HTTPException(status_code=500, detail=f"Failed to generate answer: {exc}")
 
     answer = result["answer"]
+    thinking = result.get("thinking", "")
     source_docs = result.get("source_documents", [])
 
     # Save assistant answer
-    history_service.add_message(db, body.conversation_id, "assistant", answer)
+    history_service.add_message(db, body.conversation_id, "assistant", answer, thinking=thinking)
 
     # Build source snippets
     sources = [
@@ -54,6 +55,7 @@ async def query_pdf(
 
     return QueryResponse(
         answer=answer,
+        thinking=thinking,
         conversation_id=body.conversation_id,
         sources=sources,
     )
