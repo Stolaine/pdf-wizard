@@ -1,0 +1,66 @@
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+venv/
+env/
+*.whl
+
+# ── Node ────────────────────────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# ── Credentials / Environment ───────────────────────────────────────────────
+.env
+.env.*
+*.env
+!.env.example
+
+# ── Databases ───────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ── Vector DB / ChromaDB data ──────────────────────────────────────────────
+chroma_data/
+backend/chroma_data/
+
+# ── Logs ────────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── IDE / Editor ────────────────────────────────────────────────────────────
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+
+# ── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Misc ────────────────────────────────────────────────────────────────────
+*.bak
+*.tmp
+*.cache
