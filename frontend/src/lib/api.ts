@@ -24,6 +24,7 @@ export interface QueryResponse {
   answer: string;
   conversation_id: string;
   sources: SourceChunk[];
+  thinking?: string;
 }
 
 export interface MessageOut {
@@ -31,6 +32,7 @@ export interface MessageOut {
   role: "user" | "assistant";
   content: string;
   created_at: string;
+  thinking?: string;
 }
 
 export interface ConversationSummary {

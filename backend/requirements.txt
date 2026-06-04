@@ -3,6 +3,8 @@ uvicorn[standard]==0.34.3
 python-multipart==0.0.20
 langchain==0.3.25
 langchain-google-genai==2.1.4
+langchain-huggingface==0.1.2
+sentence-transformers==3.3.1
 langchain-community==0.3.24
 langchain-chroma==0.2.4
 chromadb>=1.0.9

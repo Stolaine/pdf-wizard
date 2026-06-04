@@ -38,12 +38,14 @@ def add_message(
     conversation_id: str,
     role: str,
     content: str,
+    thinking: str | None = None,
 ) -> Message:
     """Append a message to an existing conversation."""
     msg = Message(
         conversation_id=conversation_id,
         role=role,
         content=content,
+        thinking=thinking,
         created_at=datetime.now(timezone.utc),
     )
     db.add(msg)

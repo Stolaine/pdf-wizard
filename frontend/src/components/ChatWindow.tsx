@@ -52,7 +52,7 @@ export function ChatWindow({ messages, isLoading = false, pdfName }: ChatWindowP
   return (
     <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-6 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
       {messages.map((msg) => (
-        <MessageBubble key={msg.id} role={msg.role} content={msg.content} />
+        <MessageBubble key={msg.id} role={msg.role} content={msg.content} thinking={msg.thinking} />
       ))}
       {isLoading && (
         <div className="mr-auto">

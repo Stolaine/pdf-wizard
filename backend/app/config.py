@@ -10,9 +10,9 @@ class Settings(BaseSettings):
     # --- Google / Gemini ---
     google_api_key: str = ""
 
-    # --- LLM ---
-    llm_model: str = "gemini-2.0-flash"
-    embedding_model: str = "models/embedding-001"
+    # --- Local Hugging Face models ---
+    llm_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
 
     # --- Chunking ---
     chunk_size: int = 1000

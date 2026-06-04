@@ -1,0 +1,15 @@
+services:
+  pdf-wizard:
+    build: .
+    container_name: pdf-wizard
+    ports:
+      - "8000:8000"
+    env_file:
+      - backend/.env
+    volumes:
+      # Persist DBs across container restarts
+      - pdf-wizard-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  pdf-wizard-data:

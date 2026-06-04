@@ -64,6 +64,7 @@ export default function App() {
           id: Date.now() + 1,
           role: "assistant",
           content: res.answer,
+          thinking: res.thinking,
           created_at: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMsg]);
