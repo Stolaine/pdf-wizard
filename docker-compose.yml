@@ -1,6 +1,7 @@
 services:
   pdf-wizard:
     build: .
+    image: pdf-wizard:latest
     container_name: pdf-wizard
     ports:
       - "8000:8000"
