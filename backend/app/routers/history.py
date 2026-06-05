@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.models import ConversationDetail, ConversationSummary, MessageOut
+from app.models import ConversationDetail, ConversationSummary, MessageOut, UploadedFileOut
 from app.services import history_service
 
 router = APIRouter(prefix="/api", tags=["history"])
@@ -23,6 +23,7 @@ async def list_conversations(db: Session = Depends(get_db)):
             pdf_name=c.pdf_name,
             collection_name=c.collection_name,
             created_at=c.created_at,
+            files=[UploadedFileOut.from_db(f) for f in c.files],
         )
         for c in convos
     ]
@@ -41,6 +42,7 @@ async def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
         pdf_name=conv.pdf_name,
         collection_name=conv.collection_name,
         created_at=conv.created_at,
+        files=[UploadedFileOut.from_db(f) for f in conv.files],
         messages=[
             MessageOut(
                 id=m.id,

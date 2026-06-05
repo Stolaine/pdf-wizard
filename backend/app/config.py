@@ -21,8 +21,10 @@ class Settings(BaseSettings):
     # --- Storage paths (relative to backend/) ---
     chroma_persist_dir: str = str(Path(__file__).resolve().parent.parent / "chroma_data")
     sqlite_url: str = f"sqlite:///{Path(__file__).resolve().parent.parent / 'pdf_wizard.db'}"
+    uploads_dir: str = str(Path(__file__).resolve().parent.parent / "uploads")
 
     # --- Upload ---
+
     max_upload_bytes: int = 20 * 1024 * 1024  # 20 MB
 
     class Config:

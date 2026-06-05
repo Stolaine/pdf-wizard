@@ -97,3 +97,14 @@ def search_similar(query: str, collection_name: str, k: int = 5) -> list[Documen
     results = vs.similarity_search(query, k=k)
     logger.info("Found %d similar chunks for query in '%s'", len(results), collection_name)
     return results
+
+
+def delete_collection(collection_name: str) -> None:
+    """Delete a Chroma collection from the vector store."""
+    vs = get_vectorstore(collection_name)
+    try:
+        vs.delete_collection()
+        logger.info("Successfully deleted Chroma collection '%s'", collection_name)
+    except Exception as exc:
+        logger.warning("Failed to delete Chroma collection '%s': %s", collection_name, exc)
+

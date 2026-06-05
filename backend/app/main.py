@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db.database import init_db
-from app.routers import history, query, upload
+from app.routers import history, query, upload, files
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,6 +69,7 @@ app.add_middleware(
 app.include_router(upload.router)
 app.include_router(query.router)
 app.include_router(history.router)
+app.include_router(files.router)
 
 
 @app.get("/api/health")

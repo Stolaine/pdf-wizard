@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from langchain.chains import RetrievalQA
+from langchain.chains.question_answering import load_qa_chain
 from langchain_huggingface import HuggingFacePipeline
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
@@ -40,37 +40,40 @@ def _get_llm() -> HuggingFacePipeline:
 
 # ── Answer a question ──────────────────────────────────────────────────────
 
-def answer_question(question: str, collection_name: str) -> dict:
-    """Run a retrieval-augmented QA chain and return the result.
+def answer_question(question: str, collection_names: list[str]) -> dict:
+    """Run a retrieval-augmented QA chain across multiple Chroma collections and return the result.
 
     Returns:
-        dict with keys ``answer`` (str) and ``source_documents`` (list[Document]).
+        dict with keys ``answer``, ``thinking``, and ``source_documents``.
     """
-    logger.info("Starting QA process for question: '%s'", question)
+    logger.info("Starting multi-file QA process for question: '%s'", question)
 
-    # 1. Retrieve relevant chunks
-    logger.info("Retrieving similar chunks from Chroma collection '%s'...", collection_name)
-    vectorstore = get_vectorstore(collection_name)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-    docs = retriever.invoke(question)
+    # 1. Retrieve relevant chunks from all collections
+    all_docs = []
+    for col_name in collection_names:
+        try:
+            logger.info("Retrieving similar chunks from Chroma collection '%s'...", col_name)
+            vectorstore = get_vectorstore(col_name)
+            docs = vectorstore.similarity_search(question, k=3)
+            all_docs.extend(docs)
+        except Exception as exc:
+            logger.warning("Failed to retrieve from collection '%s': %s", col_name, exc)
 
-    logger.info("Retrieved %d relevant context chunks:", len(docs))
-    for idx, doc in enumerate(docs, 1):
+    logger.info("Retrieved %d total relevant context chunks across all collections:", len(all_docs))
+    for idx, doc in enumerate(all_docs, 1):
         snippet = doc.page_content.replace("\n", " ")[:120] + "..."
         logger.info("  [Chunk %d] Metadata: %s | Snippet: %s", idx, doc.metadata, snippet)
 
-    # 2. Run RetrievalQA Chain
+    # 2. Run QA Stuff Chain manually
     logger.info("Sending query and retrieved context to Hugging Face LLM (%s)...", settings.llm_model)
 
-    qa_chain = RetrievalQA.from_chain_type(
+    qa_chain = load_qa_chain(
         llm=_get_llm(),
         chain_type="stuff",
-        retriever=retriever,
-        return_source_documents=True,
     )
 
-    result = qa_chain.invoke({"query": question})
-    raw_output = result["result"]
+    result = qa_chain.invoke({"input_documents": all_docs, "question": question})
+    raw_output = result["output_text"]
     logger.info("Successfully generated answer from Hugging Face LLM (length=%d).", len(raw_output))
 
     # Parse raw output into thinking and helpful answer
@@ -100,5 +103,5 @@ def answer_question(question: str, collection_name: str) -> dict:
     return {
         "answer": helpful_answer,
         "thinking": thinking,
-        "source_documents": result.get("source_documents", []),
+        "source_documents": all_docs,
     }

@@ -1,17 +1,14 @@
-"""Upload router — handles PDF file uploads and processing."""
-
-from __future__ import annotations
-
+import os
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db.database import get_db
+from app.db.database import get_db, Conversation
 from app.models import UploadResponse
-from app.services import pdf_service, vector_service, history_service
+from app.services import pdf_service, vector_service, history_service, file_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["upload"])
@@ -20,6 +17,7 @@ router = APIRouter(prefix="/api", tags=["upload"])
 @router.post("/upload", response_model=UploadResponse)
 async def upload_pdf(
     file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
 ):
     """Upload a PDF, extract text, create embeddings, store in ChromaDB."""
@@ -36,35 +34,96 @@ async def upload_pdf(
             detail=f"File too large. Maximum size is {settings.max_upload_bytes // (1024 * 1024)} MB.",
         )
 
-    # ── Extract text ────────────────────────────────────────────────────
-    try:
-        text = pdf_service.extract_text(file_bytes)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+    # ── Check Duplicate Ingestion ───────────────────────────────────────
+    os.makedirs(settings.uploads_dir, exist_ok=True)
+    save_path = os.path.join(settings.uploads_dir, file.filename)
 
-    # ── Chunk + embed ───────────────────────────────────────────────────
-    documents = vector_service.chunk_text(text)
-    collection_name = f"pdf_{uuid.uuid4().hex[:12]}"
-    vector_service.store_embeddings(documents, collection_name)
+    existing_file = file_service.get_file_by_filename(db, file.filename)
+    if existing_file:
+        if existing_file.status in ("COMPLETED", "PENDING", "PROCESSING") and os.path.exists(save_path):
+            logger.info(
+                "PDF '%s' already exists in local storage and database with status '%s'. Reusing...",
+                file.filename,
+                existing_file.status,
+            )
+            conversation = history_service.create_conversation(
+                db=db,
+                pdf_name=file.filename,
+                collection_name=existing_file.collection_name,
+                file_id=existing_file.id,
+            )
+            return UploadResponse(
+                filename=file.filename,
+                num_chunks=existing_file.num_chunks,
+                collection_name=existing_file.collection_name,
+                conversation_id=conversation.id,
+                file_id=existing_file.id,
+                message=f"PDF already exists (status: {existing_file.status}), starting new conversation."
+            )
+        else:
+            # Clean up the failed/cancelled/stale file first to avoid unique constraint violations
+            file_service.delete_file(db, existing_file.id)
+
+    # ── Save PDF to local storage ───────────────────────────────────────
+    try:
+        with open(save_path, "wb") as f:
+            f.write(file_bytes)
+    except Exception as exc:
+        logger.exception("Failed to save PDF to local storage")
+        raise HTTPException(status_code=500, detail=f"Failed to write file to local disk: {exc}")
+
+    # ── Parse pages count ───────────────────────────────────────────────
+    import io
+    from pypdf import PdfReader
+    try:
+        reader = PdfReader(io.BytesIO(file_bytes))
+        num_pages = len(reader.pages)
+    except Exception as exc:
+        logger.exception("Failed to parse PDF pages")
+        raise HTTPException(status_code=400, detail=f"Failed to parse PDF metadata: {exc}")
+
+    file_size = len(file_bytes)
+
+    # ── Register UploadedFile in PENDING state ──────────────────────────
+    uploaded_file = file_service.create_file_metadata(
+        db=db,
+        filename=file.filename,
+        file_size=file_size,
+        num_pages=num_pages,
+        chunk_size=settings.chunk_size,
+        overlap_size=settings.chunk_overlap,
+        embedding_model=settings.embedding_model,
+    )
 
     # ── Create conversation ─────────────────────────────────────────────
     conversation = history_service.create_conversation(
         db=db,
         pdf_name=file.filename,
-        collection_name=collection_name,
+        collection_name=uploaded_file.collection_name,
+        file_id=uploaded_file.id,
+    )
+
+    # ── Launch background embedding task ───────────────────────────────
+    background_tasks.add_task(
+        file_service.process_embedding_task,
+        file_id=uploaded_file.id,
+        file_path=save_path,
     )
 
     logger.info(
-        "Processed '%s': %d chunks → collection '%s', conversation '%s'",
+        "Started background embedding task for '%s': collection '%s', conversation '%s'",
         file.filename,
-        len(documents),
-        collection_name,
+        uploaded_file.collection_name,
         conversation.id,
     )
 
     return UploadResponse(
         filename=file.filename,
-        num_chunks=len(documents),
-        collection_name=collection_name,
+        num_chunks=0,
+        collection_name=uploaded_file.collection_name,
         conversation_id=conversation.id,
+        file_id=uploaded_file.id,
+        message="PDF upload successful, starting background embedding..."
     )
+
+

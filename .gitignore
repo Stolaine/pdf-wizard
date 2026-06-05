@@ -64,3 +64,7 @@ Thumbs.db
 *.bak
 *.tmp
 *.cache
+
+# ── Local Ingested PDFs ──────────────────────────────────────────────────────
+backend/uploads/
+

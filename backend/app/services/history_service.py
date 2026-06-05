@@ -16,18 +16,52 @@ def create_conversation(
     db: Session,
     pdf_name: str,
     collection_name: str,
+    file_id: str | None = None,
+    file_ids: list[str] | None = None,
 ) -> Conversation:
-    """Create a new conversation record for an uploaded PDF."""
+    """Create a new conversation record and link it to uploaded files."""
+    ids_to_fetch = []
+    if file_id:
+        ids_to_fetch.append(file_id)
+    if file_ids:
+        ids_to_fetch.extend(file_ids)
+
+    files_list = []
+    if ids_to_fetch:
+        from app.db.database import UploadedFile
+        files_list = db.query(UploadedFile).filter(UploadedFile.id.in_(ids_to_fetch)).all()
+
     conv = Conversation(
         id=str(uuid.uuid4()),
         title=pdf_name,
         pdf_name=pdf_name,
         collection_name=collection_name,
+        files=files_list,
         created_at=datetime.now(timezone.utc),
     )
     db.add(conv)
     db.commit()
     db.refresh(conv)
+    return conv
+
+
+def add_file_to_conversation(
+    db: Session,
+    conversation_id: str,
+    file_id: str,
+) -> Conversation | None:
+    """Associate an uploaded file with an existing conversation."""
+    from app.db.database import UploadedFile
+    conv = get_conversation(db, conversation_id)
+    uploaded_file = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+
+    if conv is None or uploaded_file is None:
+        return None
+
+    if uploaded_file not in conv.files:
+        conv.files.append(uploaded_file)
+        db.commit()
+        db.refresh(conv)
     return conv
 
 

@@ -19,15 +19,19 @@ echo ""
 echo "📦 Starting backend..."
 (
   cd "$ROOT_DIR/backend"
-  if [ ! -d ".venv" ]; then
-    echo "   Creating virtual environment..."
+  if [ -d "$ROOT_DIR/.venv" ]; then
+    echo "   Using root virtual environment..."
+    source "$ROOT_DIR/.venv/bin/activate"
+  elif [ -d ".venv" ]; then
+    source .venv/bin/activate
+  else
+    echo "   Creating virtual environment in backend..."
     python3 -m venv .venv
+    source .venv/bin/activate
   fi
-  source .venv/bin/activate
   pip install -q -r requirements.txt
   uvicorn app.main:app --reload --port 8000
 ) &
-BACKEND_PID=$!
 
 # ── Start frontend ──────────────────────────────────────────────────────────
 echo "🎨 Starting frontend..."
