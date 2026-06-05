@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -50,7 +50,11 @@ async def cancel_file_embedding(file_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/files/{file_id}/conversations", response_model=ConversationSummary)
-async def start_new_conversation(file_id: str, db: Session = Depends(get_db)):
+async def start_new_conversation(
+    file_id: str,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db),
+):
     """Start a new chat conversation using an already uploaded PDF file."""
     uploaded_file = file_service.get_file(db, file_id)
     if uploaded_file is None:
@@ -60,6 +64,13 @@ async def start_new_conversation(file_id: str, db: Session = Depends(get_db)):
         db=db,
         pdf_name=uploaded_file.filename,
         collection_name=uploaded_file.collection_name,
+        file_id=uploaded_file.id,
+    )
+
+    # Launch background chat title generation task
+    background_tasks.add_task(
+        history_service.generate_chat_name_task,
+        conversation_id=conversation.id,
         file_id=uploaded_file.id,
     )
 
@@ -84,12 +95,21 @@ async def start_new_conversation(file_id: str, db: Session = Depends(get_db)):
 async def link_file_to_conversation(
     conversation_id: str,
     file_id: str,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
 ):
     """Associate an existing uploaded PDF with an ongoing conversation context."""
     conversation = history_service.add_file_to_conversation(db, conversation_id, file_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation or File not found.")
+
+    # Generate title in background if this is the first file linked to the conversation
+    if len(conversation.files) == 1:
+        background_tasks.add_task(
+            history_service.generate_chat_name_task,
+            conversation_id=conversation.id,
+            file_id=file_id,
+        )
 
     logger.info(
         "Linked file '%s' to conversation '%s'",

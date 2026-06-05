@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   getConversations,
   getFiles,
@@ -6,13 +6,15 @@ import {
   deleteFile,
   startConversationWithFile,
   cancelFileEmbedding,
+  createBlankConversation,
+  renameConversation,
   type ConversationSummary,
   type UploadResponse,
   type UploadedFileOut,
 } from "@/lib/api";
 import { PdfUpload } from "@/components/PdfUpload";
 import { cn } from "@/lib/utils";
-import { FileText, MessageSquare, Plus, Sparkles, Trash2, MessageSquarePlus, PanelLeftClose, Sun, Moon, Square } from "lucide-react";
+import { FileText, MessageSquare, Plus, Sparkles, Trash2, MessageSquarePlus, PanelLeftClose, Sun, Moon, Square, Pencil } from "lucide-react";
 
 interface SidebarProps {
   activeConversationId: string | null;
@@ -20,6 +22,7 @@ interface SidebarProps {
   onNewConversation: (data: UploadResponse) => void;
   refreshKey: number;
   onCollapse: () => void;
+  onActiveConversationTitleUpdate?: (title: string) => void;
 }
 
 export function Sidebar({
@@ -28,12 +31,51 @@ export function Sidebar({
   onNewConversation,
   refreshKey,
   onCollapse,
+  onActiveConversationTitleUpdate,
 }: SidebarProps) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [files, setFiles] = useState<UploadedFileOut[]>([]);
   const [activeTab, setActiveTab] = useState<"chats" | "files">("chats");
   const [showUpload, setShowUpload] = useState(false);
   const [localRefreshKey, setLocalRefreshKey] = useState(0);
+
+  // Resizable sidebar state
+  const [width, setWidth] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("sidebar-width");
+      if (stored) {
+        const parsed = parseInt(stored, 10);
+        if (!isNaN(parsed) && parsed >= 200 && parsed <= 600) {
+          return parsed;
+        }
+      }
+    }
+    return 288; // Default 288px
+  });
+
+  // Rename conversation state
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newWidth = Math.max(200, Math.min(600, startWidth + (moveEvent.clientX - startX)));
+      setWidth(newWidth);
+      localStorage.setItem("sidebar-width", newWidth.toString());
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, [width]);
 
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     if (typeof window !== "undefined") {
@@ -65,30 +107,49 @@ export function Sidebar({
       .catch(() => setFiles([]));
   }, [refreshKey, localRefreshKey]);
 
-  // Polling loop for pending/processing files
-  useEffect(() => {
-    const hasPendingOrProcessing = files.some(
-      (f) => f.status === "PENDING" || f.status === "PROCESSING"
-    );
+  const hasPendingOrProcessing = files.some(
+    (f) => f.status === "PENDING" || f.status === "PROCESSING"
+  );
+  const activeConversation = conversations.find((c) => c.id === activeConversationId);
+  const isActiveChatRenaming = !!(
+    activeConversation &&
+    activeConversation.files &&
+    activeConversation.files.length > 0 &&
+    (activeConversation.title === "New Chat" || activeConversation.title.toLowerCase().endsWith(".pdf"))
+  );
 
-    if (hasPendingOrProcessing) {
+  // Polling loop for pending/processing files or default chat titles
+  useEffect(() => {
+    if (hasPendingOrProcessing || isActiveChatRenaming) {
       const interval = setInterval(() => {
         getFiles()
           .then(setFiles)
           .catch(() => {});
         getConversations()
-          .then(setConversations)
+          .then((convs) => {
+            setConversations(convs);
+            if (activeConversationId && onActiveConversationTitleUpdate) {
+              const active = convs.find((c) => c.id === activeConversationId);
+              if (active) {
+                onActiveConversationTitleUpdate(active.title);
+              }
+            }
+          })
           .catch(() => {});
-      }, 2000);
+      }, 15000);
       return () => clearInterval(interval);
     }
-  }, [files]);
+  }, [hasPendingOrProcessing, isActiveChatRenaming, activeConversationId, onActiveConversationTitleUpdate]);
 
   function handleUploadComplete(data: UploadResponse) {
     setShowUpload(false);
-    onNewConversation(data);
-    setLocalRefreshKey((k) => k + 1);
-    setActiveTab("chats"); // Switch to chats to see the active chat
+    if (!activeConversationId) {
+      onNewConversation(data);
+      setActiveTab("chats"); // Switch to chats to see the active chat
+    } else {
+      setLocalRefreshKey((k) => k + 1);
+      setActiveTab("files"); // Switch to files tab to see the uploaded file
+    }
   }
 
   async function handleDeleteChat(e: React.MouseEvent, id: string) {
@@ -139,8 +200,48 @@ export function Sidebar({
     }
   }
 
+  async function handleStartBlankChat() {
+    try {
+      const newConv = await createBlankConversation();
+      onNewConversation({
+        filename: newConv.title,
+        num_chunks: 0,
+        collection_name: newConv.collection_name || "",
+        conversation_id: newConv.id,
+        file_id: "",
+        message: "New blank conversation created",
+      });
+      setActiveTab("chats");
+    } catch (err) {
+      console.error("Failed to start blank conversation:", err);
+    }
+  }
+
+  async function handleSaveRename(id: string) {
+    if (!editingTitle.trim()) {
+      setEditingConversationId(null);
+      return;
+    }
+    try {
+      const updated = await renameConversation(id, editingTitle.trim());
+      setConversations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, title: updated.title } : c))
+      );
+      if (activeConversationId === id) {
+        onActiveConversationTitleUpdate?.(updated.title);
+      }
+    } catch (err) {
+      console.error("Failed to rename conversation:", err);
+    } finally {
+      setEditingConversationId(null);
+    }
+  }
+
   return (
-    <aside className="flex h-full w-72 flex-col border-r border-border bg-sidebar shrink-0">
+    <aside
+      style={{ width: `${width}px` }}
+      className="flex h-full flex-col border-r border-border bg-sidebar shrink-0 relative animate-in"
+    >
       {/* Compact Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3 shrink-0">
         <div className="flex items-center gap-2">
@@ -167,25 +268,37 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Upload button */}
-      <div className="p-3">
+      {/* Upload & New Chat Buttons */}
+      <div className="flex gap-2 p-3 shrink-0">
         <button
           onClick={() => setShowUpload((v) => !v)}
           className={cn(
-            "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer",
+            "flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-xs font-medium transition-colors cursor-pointer",
             "border border-dashed border-sidebar-border",
             "text-sidebar-foreground hover:bg-sidebar-accent",
           )}
+          title="Upload PDF File"
         >
-          <Plus className="h-4 w-4" />
-          Upload PDF File
+          <Plus className="h-3.5 w-3.5" />
+          Upload PDF
+        </button>
+        <button
+          onClick={handleStartBlankChat}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-xs font-medium transition-colors cursor-pointer",
+            "bg-primary text-primary-foreground hover:bg-primary/95 shadow-sm font-medium",
+          )}
+          title="Start a new blank chat"
+        >
+          <MessageSquarePlus className="h-3.5 w-3.5" />
+          New Chat
         </button>
       </div>
 
       {/* Upload dropzone */}
       {showUpload && (
         <div className="px-3 pb-3 animate-in slide-in-from-top-2 fade-in-0 duration-200">
-          <PdfUpload onUploadComplete={handleUploadComplete} />
+          <PdfUpload onUploadComplete={handleUploadComplete} createConversation={!activeConversationId} />
         </div>
       )}
 
@@ -228,30 +341,69 @@ export function Sidebar({
           ) : (
             <div className="flex flex-col gap-1">
               {conversations.map((conv) => {
-                const titleText =
-                  conv.files && conv.files.length > 0
-                    ? conv.files.map((f) => f.filename).join(", ")
-                    : "Empty Chat";
+                const titleText = conv.title || "New Chat";
+                const isThinking = titleText === "New Chat" || titleText.toLowerCase().endsWith(".pdf");
+                const isEditing = editingConversationId === conv.id;
 
                 return (
                   <button
                     key={conv.id}
-                    onClick={() => onSelectConversation(conv)}
+                    onClick={() => !isEditing && onSelectConversation(conv)}
                     className={cn(
-                      "group flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors cursor-pointer",
+                      "group flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors cursor-pointer relative",
                       activeConversationId === conv.id
                         ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                         : "text-sidebar-foreground hover:bg-sidebar-accent/50",
                     )}
                   >
                     <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="flex-1 truncate" title={titleText}>
-                      {titleText}
-                    </span>
-                    <Trash2
-                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive cursor-pointer"
-                      onClick={(e) => handleDeleteChat(e, conv.id)}
-                    />
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            handleSaveRename(conv.id);
+                          } else if (e.key === "Escape") {
+                            setEditingConversationId(null);
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        onBlur={() => handleSaveRename(conv.id)}
+                        className="flex-1 bg-background text-foreground text-xs px-1.5 py-0.5 rounded border border-border focus:outline-none focus:border-primary"
+                        autoFocus
+                      />
+                    ) : (
+                      <>
+                        <span className="flex-1 truncate flex items-center gap-1.5" title={titleText}>
+                          {titleText}
+                          {isThinking && (
+                            <span className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border border-primary border-t-transparent" title="Thinking of a name..." />
+                          )}
+                        </span>
+                        <div className={cn(
+                          "absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none group-hover:pointer-events-auto shrink-0 backdrop-blur-sm pl-2 py-0.5 rounded-lg select-none",
+                          activeConversationId === conv.id ? "bg-sidebar-accent/80" : "bg-sidebar/80"
+                        )}>
+                          <button
+                            title="Rename chat"
+                            className="rounded p-0.5 hover:bg-sidebar-accent hover:text-foreground cursor-pointer transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingConversationId(conv.id);
+                              setEditingTitle(titleText);
+                            }}
+                          >
+                            <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                          </button>
+                          <Trash2
+                            className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive cursor-pointer"
+                            onClick={(e) => handleDeleteChat(e, conv.id)}
+                          />
+                        </div>
+                      </>
+                    )}
                   </button>
                 );
               })}
@@ -349,6 +501,12 @@ export function Sidebar({
           Powered by Gemini + LangChain
         </p>
       </div>
+
+      {/* Horizontal Resizer Handle */}
+      <div
+        onMouseDown={handleMouseDown}
+        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/40 transition-colors select-none z-50"
+      />
     </aside>
   );
 }

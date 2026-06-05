@@ -17,6 +17,7 @@ router = APIRouter(prefix="/api", tags=["upload"])
 @router.post("/upload", response_model=UploadResponse)
 async def upload_pdf(
     file: UploadFile = File(...),
+    create_conversation: bool = True,
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
 ):
@@ -46,19 +47,22 @@ async def upload_pdf(
                 file.filename,
                 existing_file.status,
             )
-            conversation = history_service.create_conversation(
-                db=db,
-                pdf_name=file.filename,
-                collection_name=existing_file.collection_name,
-                file_id=existing_file.id,
-            )
+            conv_id = ""
+            if create_conversation:
+                conversation = history_service.create_conversation(
+                    db=db,
+                    pdf_name=file.filename,
+                    collection_name=existing_file.collection_name,
+                    file_id=existing_file.id,
+                )
+                conv_id = conversation.id
             return UploadResponse(
                 filename=file.filename,
                 num_chunks=existing_file.num_chunks,
                 collection_name=existing_file.collection_name,
-                conversation_id=conversation.id,
+                conversation_id=conv_id,
                 file_id=existing_file.id,
-                message=f"PDF already exists (status: {existing_file.status}), starting new conversation."
+                message=f"PDF already exists (status: {existing_file.status}), starting new conversation." if create_conversation else "PDF already exists."
             )
         else:
             # Clean up the failed/cancelled/stale file first to avoid unique constraint violations
@@ -95,13 +99,23 @@ async def upload_pdf(
         embedding_model=settings.embedding_model,
     )
 
-    # ── Create conversation ─────────────────────────────────────────────
-    conversation = history_service.create_conversation(
-        db=db,
-        pdf_name=file.filename,
-        collection_name=uploaded_file.collection_name,
-        file_id=uploaded_file.id,
-    )
+    # ── Create conversation if requested ────────────────────────────────
+    conv_id = ""
+    if create_conversation:
+        conversation = history_service.create_conversation(
+            db=db,
+            pdf_name=file.filename,
+            collection_name=uploaded_file.collection_name,
+            file_id=uploaded_file.id,
+        )
+        conv_id = conversation.id
+
+        # ── Launch background chat title generation task ──────────────────
+        background_tasks.add_task(
+            history_service.generate_chat_name_task,
+            conversation_id=conversation.id,
+            file_id=uploaded_file.id,
+        )
 
     # ── Launch background embedding task ───────────────────────────────
     background_tasks.add_task(
@@ -111,17 +125,17 @@ async def upload_pdf(
     )
 
     logger.info(
-        "Started background embedding task for '%s': collection '%s', conversation '%s'",
+        "Started background tasks for '%s': collection '%s', conversation '%s'",
         file.filename,
         uploaded_file.collection_name,
-        conversation.id,
+        conv_id,
     )
 
     return UploadResponse(
         filename=file.filename,
         num_chunks=0,
         collection_name=uploaded_file.collection_name,
-        conversation_id=conversation.id,
+        conversation_id=conv_id,
         file_id=uploaded_file.id,
         message="PDF upload successful, starting background embedding..."
     )

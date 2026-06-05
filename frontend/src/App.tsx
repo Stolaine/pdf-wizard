@@ -15,6 +15,7 @@ import {
 export default function App() {
   // ── State ────────────────────────────────────────────────────────────
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationTitle, setConversationTitle] = useState<string>("");
   const [activeFiles, setActiveFiles] = useState<UploadedFileOut[]>([]);
   const [messages, setMessages] = useState<MessageOut[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -26,12 +27,14 @@ export default function App() {
   /** Called when a new PDF is uploaded or new chat is started */
   const handleNewConversation = useCallback((data: UploadResponse) => {
     setConversationId(data.conversation_id);
+    setConversationTitle(data.filename || "New Chat");
     setMessages([]);
     setRefreshKey((k) => k + 1);
     
     // Fetch conversation detail to load the files list automatically
     getConversation(data.conversation_id)
       .then((detail) => {
+        setConversationTitle(detail.title);
         setActiveFiles(detail.files || []);
       })
       .catch(() => {
@@ -42,10 +45,12 @@ export default function App() {
   /** Called when user clicks a conversation in the sidebar */
   const handleSelectConversation = useCallback(async (conv: ConversationSummary) => {
     setConversationId(conv.id);
+    setConversationTitle(conv.title);
     setActiveFiles(conv.files || []);
     setMessages([]);
     try {
       const detail = await getConversation(conv.id);
+      setConversationTitle(detail.title);
       setMessages(detail.messages);
       setActiveFiles(detail.files || []);
     } catch {
@@ -111,6 +116,7 @@ export default function App() {
           onNewConversation={handleNewConversation}
           refreshKey={refreshKey}
           onCollapse={() => setIsSidebarOpen(false)}
+          onActiveConversationTitleUpdate={setConversationTitle}
         />
       )}
 
@@ -129,12 +135,11 @@ export default function App() {
           )}
           
           <div className="flex items-center gap-2 overflow-hidden">
-            <span className="text-sm font-semibold text-foreground truncate">
-              {conversationId 
-                ? (activeFiles.length > 0 
-                    ? `Chat about ${activeFiles.map(f => f.filename).join(", ")}` 
-                    : "Empty Chat") 
-                : ""}
+            <span className="text-sm font-semibold text-foreground truncate flex items-center gap-2">
+              {conversationId ? conversationTitle : ""}
+              {conversationId && (conversationTitle === "New Chat" || conversationTitle.toLowerCase().endsWith(".pdf")) && (
+                <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" title="Thinking of a name..." />
+              )}
             </span>
           </div>
         </header>

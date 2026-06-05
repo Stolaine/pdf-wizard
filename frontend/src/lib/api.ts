@@ -81,10 +81,10 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 // ── API functions ──────────────────────────────────────────────────────────
 
-export async function uploadPdf(file: File): Promise<UploadResponse> {
+export async function uploadPdf(file: File, createConversation: boolean = true): Promise<UploadResponse> {
   const form = new FormData();
   form.append("file", file);
-  return request<UploadResponse>(`${BASE}/upload`, {
+  return request<UploadResponse>(`${BASE}/upload?create_conversation=${createConversation}`, {
     method: "POST",
     body: form,
   });
@@ -145,4 +145,16 @@ export async function healthCheck(): Promise<{ status: string }> {
 
 export async function cancelFileEmbedding(fileId: string): Promise<void> {
   await request(`${BASE}/files/${fileId}/cancel`, { method: "POST" });
+}
+
+export async function createBlankConversation(): Promise<ConversationSummary> {
+  return request<ConversationSummary>(`${BASE}/conversations`, { method: "POST" });
+}
+
+export async function renameConversation(id: string, title: string): Promise<ConversationSummary> {
+  return request<ConversationSummary>(`${BASE}/conversations/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
 }

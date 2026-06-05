@@ -247,7 +247,7 @@ export function ChatWindow({
                 )
               ) : (
                 <div className="py-2">
-                  <PdfUpload onUploadComplete={handleNewUploadComplete} />
+                  <PdfUpload onUploadComplete={handleNewUploadComplete} createConversation={false} />
                 </div>
               )}
             </div>

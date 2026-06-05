@@ -63,3 +63,47 @@ async def delete_conversation(conversation_id: str, db: Session = Depends(get_db
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found.")
     return {"detail": "Conversation deleted."}
+
+
+from pydantic import BaseModel
+
+class RenameConversationRequest(BaseModel):
+    title: str
+
+
+@router.post("/conversations", response_model=ConversationSummary)
+async def create_blank_conversation(db: Session = Depends(get_db)):
+    """Create a new blank conversation with no linked files."""
+    conversation = history_service.create_conversation(
+        db=db,
+        pdf_name="New Chat",
+        collection_name="",
+    )
+    return ConversationSummary(
+        id=conversation.id,
+        title=conversation.title,
+        pdf_name=conversation.pdf_name,
+        collection_name=conversation.collection_name,
+        created_at=conversation.created_at,
+        files=[],
+    )
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ConversationSummary)
+async def rename_conversation(
+    conversation_id: str,
+    body: RenameConversationRequest,
+    db: Session = Depends(get_db),
+):
+    """Update the title of a conversation."""
+    conv = history_service.update_conversation_title(db, conversation_id, body.title)
+    if conv is None:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return ConversationSummary(
+        id=conv.id,
+        title=conv.title,
+        pdf_name=conv.pdf_name,
+        collection_name=conv.collection_name,
+        created_at=conv.created_at,
+        files=[UploadedFileOut.from_db(f) for f in conv.files],
+    )
