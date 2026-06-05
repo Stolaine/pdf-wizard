@@ -158,3 +158,22 @@ export async function renameConversation(id: string, title: string): Promise<Con
     body: JSON.stringify({ title }),
   });
 }
+
+export interface CollectionMetric {
+  name: string;
+  count: number;
+}
+
+export interface DatabaseMetricsResponse {
+  total_files: number;
+  total_file_size_bytes: number;
+  total_conversations: number;
+  total_messages: number;
+  status_counts: Record<string, number>;
+  chroma_collections: CollectionMetric[];
+  files: UploadedFileOut[];
+}
+
+export async function getDatabaseMetrics(): Promise<DatabaseMetricsResponse> {
+  return request<DatabaseMetricsResponse>(`${BASE}/metrics`);
+}

@@ -14,7 +14,7 @@ import {
 } from "@/lib/api";
 import { PdfUpload } from "@/components/PdfUpload";
 import { cn } from "@/lib/utils";
-import { FileText, MessageSquare, Plus, Sparkles, Trash2, MessageSquarePlus, PanelLeftClose, Sun, Moon, Square, Pencil } from "lucide-react";
+import { FileText, MessageSquare, Plus, Sparkles, Trash2, MessageSquarePlus, PanelLeftClose, Sun, Moon, Square, Pencil, Database } from "lucide-react";
 
 interface SidebarProps {
   activeConversationId: string | null;
@@ -23,6 +23,8 @@ interface SidebarProps {
   refreshKey: number;
   onCollapse: () => void;
   onActiveConversationTitleUpdate?: (title: string) => void;
+  activeView: "chat" | "metrics";
+  onViewChange: (view: "chat" | "metrics") => void;
 }
 
 export function Sidebar({
@@ -32,6 +34,8 @@ export function Sidebar({
   refreshKey,
   onCollapse,
   onActiveConversationTitleUpdate,
+  activeView,
+  onViewChange,
 }: SidebarProps) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [files, setFiles] = useState<UploadedFileOut[]>([]);
@@ -144,6 +148,7 @@ export function Sidebar({
   function handleUploadComplete(data: UploadResponse) {
     setShowUpload(false);
     if (!activeConversationId) {
+      onViewChange("chat");
       onNewConversation(data);
       setActiveTab("chats"); // Switch to chats to see the active chat
     } else {
@@ -176,6 +181,7 @@ export function Sidebar({
     e.stopPropagation();
     try {
       const newConv = await startConversationWithFile(fileId);
+      onViewChange("chat");
       onNewConversation({
         filename: newConv.pdf_name || "",
         num_chunks: 0,
@@ -203,6 +209,7 @@ export function Sidebar({
   async function handleStartBlankChat() {
     try {
       const newConv = await createBlankConversation();
+      onViewChange("chat");
       onNewConversation({
         filename: newConv.title,
         num_chunks: 0,
@@ -251,6 +258,18 @@ export function Sidebar({
           <span className="text-sm font-bold text-sidebar-foreground">PDF Wizard</span>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => onViewChange(activeView === "chat" ? "metrics" : "chat")}
+            className={cn(
+              "rounded-lg p-1 transition-colors cursor-pointer",
+              activeView === "metrics"
+                ? "bg-primary/15 text-primary hover:bg-primary/25"
+                : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+            )}
+            title={activeView === "metrics" ? "Switch to Chat View" : "View Database Statistics"}
+          >
+            <Database className="h-4 w-4" />
+          </button>
           <button
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
             className="rounded-lg p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground cursor-pointer transition-colors"
@@ -348,7 +367,12 @@ export function Sidebar({
                 return (
                   <button
                     key={conv.id}
-                    onClick={() => !isEditing && onSelectConversation(conv)}
+                    onClick={() => {
+                      if (!isEditing) {
+                        onViewChange("chat");
+                        onSelectConversation(conv);
+                      }
+                    }}
                     className={cn(
                       "group flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors cursor-pointer relative",
                       activeConversationId === conv.id

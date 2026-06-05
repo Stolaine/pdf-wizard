@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatWindow } from "@/components/ChatWindow";
 import { ChatInput } from "@/components/ChatInput";
+import { MetricsDashboard } from "@/components/MetricsDashboard";
 import { Menu } from "lucide-react";
 import {
   getConversation,
@@ -21,6 +22,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [view, setView] = useState<"chat" | "metrics">("chat");
 
   // ── Handlers ─────────────────────────────────────────────────────────
 
@@ -117,50 +119,72 @@ export default function App() {
           refreshKey={refreshKey}
           onCollapse={() => setIsSidebarOpen(false)}
           onActiveConversationTitleUpdate={setConversationTitle}
+          activeView={view}
+          onViewChange={setView}
         />
       )}
 
       {/* Main content */}
       <main className="flex flex-1 flex-col overflow-hidden relative">
-        {/* Header (with Sidebar Toggle and context display) */}
-        <header className="flex items-center gap-4 px-6 py-3 shrink-0">
-          {!isSidebarOpen && (
-            <button
-              onClick={() => setIsSidebarOpen(true)}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer transition-colors"
-              title="Open Sidebar"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-          )}
-          
-          <div className="flex items-center gap-2 overflow-hidden">
-            <span className="text-sm font-semibold text-foreground truncate flex items-center gap-2">
-              {conversationId ? conversationTitle : ""}
-              {conversationId && (conversationTitle === "New Chat" || conversationTitle.toLowerCase().endsWith(".pdf")) && (
-                <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" title="Thinking of a name..." />
+        {view === "metrics" ? (
+          <>
+            {/* Header (only show sidebar toggle when collapsed) */}
+            {!isSidebarOpen && (
+              <header className="flex items-center gap-4 px-6 py-3 shrink-0">
+                <button
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer transition-colors"
+                  title="Open Sidebar"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+              </header>
+            )}
+            <MetricsDashboard />
+          </>
+        ) : (
+          <>
+            {/* Header (with Sidebar Toggle and context display) */}
+            <header className="flex items-center gap-4 px-6 py-3 shrink-0">
+              {!isSidebarOpen && (
+                <button
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer transition-colors"
+                  title="Open Sidebar"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
               )}
-            </span>
-          </div>
-        </header>
+              
+              <div className="flex items-center gap-2 overflow-hidden">
+                <span className="text-sm font-semibold text-foreground truncate flex items-center gap-2">
+                  {conversationId ? conversationTitle : ""}
+                  {conversationId && (conversationTitle === "New Chat" || conversationTitle.toLowerCase().endsWith(".pdf")) && (
+                    <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" title="Thinking of a name..." />
+                  )}
+                </span>
+              </div>
+            </header>
 
-        {/* Chat area (lists active files and Add Context UI internally) */}
-        <ChatWindow 
-          messages={messages} 
-          isLoading={isLoading} 
-          activeFiles={activeFiles}
-          conversationId={conversationId}
-          onUpdateActiveFiles={handleUpdateActiveFiles}
-          onNewConversation={handleNewConversation}
-        />
+            {/* Chat area (lists active files and Add Context UI internally) */}
+            <ChatWindow 
+              messages={messages} 
+              isLoading={isLoading} 
+              activeFiles={activeFiles}
+              conversationId={conversationId}
+              onUpdateActiveFiles={handleUpdateActiveFiles}
+              onNewConversation={handleNewConversation}
+            />
 
-        {/* Input (only visible when a conversation is active) */}
-        {conversationId && (
-          <div className="border-t border-border bg-background px-4 py-3 shrink-0">
-            <div className="mx-auto max-w-3xl">
-              <ChatInput onSend={handleSend} disabled={isLoading} />
-            </div>
-          </div>
+            {/* Input (only visible when a conversation is active) */}
+            {conversationId && (
+              <div className="border-t border-border bg-background px-4 py-3 shrink-0">
+                <div className="mx-auto max-w-3xl">
+                  <ChatInput onSend={handleSend} disabled={isLoading} />
+                </div>
+              </div>
+            )}
+          </>
         )}
       </main>
     </div>
