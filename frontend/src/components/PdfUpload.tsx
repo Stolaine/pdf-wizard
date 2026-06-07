@@ -5,11 +5,12 @@ import { uploadPdf, type UploadResponse } from "@/lib/api";
 
 interface PdfUploadProps {
   onUploadComplete: (data: UploadResponse) => void;
+  createConversation?: boolean;
 }
 
 type UploadState = "idle" | "dragging" | "uploading" | "success" | "error";
 
-export function PdfUpload({ onUploadComplete }: PdfUploadProps) {
+export function PdfUpload({ onUploadComplete, createConversation = true }: PdfUploadProps) {
   const [state, setState] = useState<UploadState>("idle");
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
@@ -33,7 +34,7 @@ export function PdfUpload({ onUploadComplete }: PdfUploadProps) {
       setError("");
 
       try {
-        const data = await uploadPdf(file);
+        const data = await uploadPdf(file, createConversation);
         setState("success");
         onUploadComplete(data);
         // Reset after a brief success animation
@@ -43,7 +44,7 @@ export function PdfUpload({ onUploadComplete }: PdfUploadProps) {
         setError(err instanceof Error ? err.message : "Upload failed.");
       }
     },
-    [onUploadComplete],
+    [onUploadComplete, createConversation],
   );
 
   function onDrop(e: React.DragEvent) {

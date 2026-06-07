@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db.database import init_db
-from app.routers import history, query, upload
+from app.routers import history, query, upload, files, metrics
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,6 +43,16 @@ async def lifespan(app: FastAPI):
     logger.info("Initialising database …")
     init_db()
     logger.info("Database ready ✓")
+
+    # Run database/Chroma synchronization to enforce consistency
+    try:
+        from app.db.database import SessionLocal
+        from app.services.file_service import sync_database_and_chroma
+        with SessionLocal() as db:
+            sync_database_and_chroma(db)
+    except Exception as exc:
+        logger.exception("Failed to run startup database and Chroma synchronization")
+
     yield  # app runs here
     logger.info("Shutting down …")
 
@@ -69,6 +79,8 @@ app.add_middleware(
 app.include_router(upload.router)
 app.include_router(query.router)
 app.include_router(history.router)
+app.include_router(files.router)
+app.include_router(metrics.router)
 
 
 @app.get("/api/health")
