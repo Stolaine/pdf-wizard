@@ -148,3 +148,97 @@ def embed_pdf(file_path: str) -> dict:
             "conversation_id": "",
             "message": msg,
         }
+
+
+@tool
+def extract_similar_vector(query: str, collection_names: list[str]) -> list[dict]:
+    """Retrieves context chunks most similar to a query from specified vector collections.
+
+    Args:
+        query: The semantic search query phrase.
+        collection_names: The names of the ChromaDB collections to search.
+
+    Returns:
+        A list of dictionaries containing keys:
+        - page_content: The text content of the chunk.
+        - page: The page number within the original document (if available).
+    """
+    logger.info("Tool extract_similar_vector called for query: '%s' in collections: %s", query, collection_names)
+    all_chunks = []
+    
+    for col_name in collection_names:
+        try:
+            vectorstore = vector_service.get_vectorstore(col_name)
+            docs = vectorstore.similarity_search(query, k=3)
+            for doc in docs:
+                all_chunks.append({
+                    "page_content": doc.page_content,
+                    "page": doc.metadata.get("page"),
+                })
+        except Exception as exc:
+            logger.warning("Failed to search collection '%s': %s", col_name, exc)
+
+    logger.info("Tool extract_similar_vector retrieved %d matching chunks", len(all_chunks))
+    return all_chunks
+
+
+@tool
+def generate_response(query: str, retrieved_context: list[dict]) -> dict:
+    """Uses LLM text generation to build a helpful answer for the user query based on context.
+
+    Args:
+        query: The user's query question.
+        retrieved_context: List of context dictionaries (with content and page details).
+
+    Returns:
+        A dictionary containing:
+        - answer: The final helpful answer.
+        - thinking: The parsed chain-of-thought/reasoning output of the LLM.
+        - source_documents: Reconstructed document fragments used in answering.
+    """
+    logger.info("Tool generate_response called for query: '%s' with %d context chunks", query, len(retrieved_context))
+    
+    # 1. Convert back to LangChain Documents for QA Chain compatibility
+    from langchain_core.documents import Document
+    lc_docs = [
+        Document(page_content=c["page_content"], metadata={"page": c["page"]})
+        for c in retrieved_context
+    ]
+
+    # 2. Invoke local HF pipeline QA stuff chain
+    from app.services import qa_service
+    from langchain.chains.question_answering import load_qa_chain
+    
+    qa_chain = load_qa_chain(
+        llm=qa_service._get_llm(),
+        chain_type="stuff",
+    )
+
+    result = qa_chain.invoke({"input_documents": lc_docs, "question": query})
+    raw_output = result["output_text"]
+
+    helpful_answer = raw_output
+    thinking = ""
+
+    question_marker = "Question:"
+    helpful_answer_marker = "Helpful Answer:"
+
+    q_idx = raw_output.find(question_marker)
+    a_idx = raw_output.find(helpful_answer_marker)
+
+    if a_idx != -1:
+        helpful_answer = raw_output[a_idx + len(helpful_answer_marker):].strip()
+        if q_idx != -1 and q_idx < a_idx:
+            thinking = raw_output[:q_idx].strip()
+        else:
+            thinking = raw_output[:a_idx].strip()
+    else:
+        if q_idx != -1:
+            thinking = raw_output[:q_idx].strip()
+            helpful_answer = raw_output[q_idx + len(question_marker):].strip()
+
+    return {
+        "answer": helpful_answer,
+        "thinking": thinking,
+        "source_documents": lc_docs,
+    }

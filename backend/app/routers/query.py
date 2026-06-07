@@ -57,12 +57,13 @@ async def query_pdf(
             sources=[],
         )
 
-    # Get answer from QA chain
+    # Get answer from LangGraph agent
     try:
-        result = qa_service.answer_question(body.question, collection_names)
+        from app.services import agent_service
+        result = agent_service.run_agent(body.question, collection_names)
     except Exception as exc:
-        logger.exception("QA chain failed")
-        raise HTTPException(status_code=500, detail=f"Failed to generate answer: {exc}")
+        logger.exception("LangGraph agent execution failed")
+        raise HTTPException(status_code=500, detail=f"Failed to generate answer via agent: {exc}")
 
     answer = result["answer"]
     thinking = result.get("thinking", "")
